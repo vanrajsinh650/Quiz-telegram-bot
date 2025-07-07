@@ -5,6 +5,7 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "python-dotenv>=1.1.1",
     "python-telegram-bot>=22.2",
     "schedule>=1.2.2",
     "telegram>=0.0.1",

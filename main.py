@@ -1,14 +1,15 @@
 from datetime import time, timezone, timedelta, datetime
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+from doctest import load_dotenv
 import asyncio
 import os
 import json
 
+load_dotenv()
 
-TOKEN_API = "8127712994:AAFoX8-ZFNiwBNU-RnGpKexTucFEiGs2A_E"
-# CHANNAL_ID = -1002838031830
-CHAT_ID = -1002781031162
+TOKEN_API = os.getenv("TOKEN_API")
+CHAT_ID = int(os.getenv("CHAT_ID"))
 
 def load_question():
     with open("question.json", "r", encoding="utf-8") as file:
