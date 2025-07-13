@@ -1,7 +1,7 @@
 from datetime import time, timezone, timedelta, datetime
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
-from doctest import load_dotenv
+from dotenv import load_dotenv
 import asyncio
 import os
 import json
