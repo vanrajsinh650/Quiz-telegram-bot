@@ -1,6 +1,6 @@
 from datetime import time, timezone, timedelta, datetime
 from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, MessageHandler, filters
 from dotenv import load_dotenv
 import asyncio
 import os
@@ -68,12 +68,22 @@ async def send_quiz(context: ContextTypes.DEFAULT_TYPE):
 
 async def reset_daily_counter(context: ContextTypes.DEFAULT_TYPE):
     save_txt(COUNT_FILE, 0)
+    
+async def delete_system_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        await update.message.delete()
+    except:
+        pass
 
 def main():
     application = ApplicationBuilder().token(TOKEN_API).build()
     
     application.add_handler(CommandHandler('start', start_bot))
     application.add_handler(CommandHandler('restart_quiz', restart_quiz))
+    
+    application.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, delete_system_messages))
+    application.add_handler(MessageHandler(filters.StatusUpdate.LEFT_CHAT_MEMBER,delete_system_messages))
+
     
     IST = timezone(timedelta(hours=5, minutes=30))
     job_queue = application.job_queue
