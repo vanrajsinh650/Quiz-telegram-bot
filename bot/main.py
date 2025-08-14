@@ -111,7 +111,7 @@ async def test_poll(update: Update, context: ContextTypes.DEFAULT_TYPE):
             correct_option_id=quiz["correct_option_id"],
             type=quiz["type"],
             explanation=quiz["explanation"],
-            is_anonymous=False
+            is_anonymous=True
         )
 
         save_txt(LAST_POLL_FILE, index + 1)
