@@ -118,6 +118,9 @@ async def test_poll(update: Update, context: ContextTypes.DEFAULT_TYPE):
         save_txt(COUNT_FILE, count + 1)
 
         print(f"Quiz sent at: {datetime.now()} (Count: {count + 1})")
+        
+        async def reset_daily_counter(context: ContextTypes.DEFAULT_TYPE):
+            save_txt(COUNT_FILE, 0)
 
 def main():
     application = ApplicationBuilder().token(TOKEN_API).build()
