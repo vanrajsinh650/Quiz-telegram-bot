@@ -69,41 +69,10 @@ async def send_quiz(context: ContextTypes.DEFAULT_TYPE):
 async def reset_daily_counter(context: ContextTypes.DEFAULT_TYPE):
     save_txt(COUNT_FILE, 0)
 
-async def test_poll(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    count = load_txt(COUNT_FILE)
-    questions = load_question()
-    last_index = load_txt(LAST_POLL_FILE)
-    total_questions = len(questions)
-    valid_count = 0
-    i = 0
-    while valid_count < 5 - count and i < total_questions:
-        index = (last_index + i) % total_questions
-        quiz = questions[index]
-        if len(quiz["question"]) > 300 or len(quiz["explanation"]) > 200:
-            i += 1
-            continue
-        await context.bot.send_poll(
-            chat_id=CHAT_ID,
-            question=quiz["question"],
-            options=quiz["options"],
-            correct_option_id=quiz["correct_option_id"],
-            type=quiz["type"],
-            explanation=quiz["explanation"],
-            is_anonymous=True
-        )
-        await asyncio.sleep(1)
-        valid_count += 1
-        i += 1
-    save_txt(LAST_POLL_FILE, (last_index + i) % total_questions)
-    save_txt(COUNT_FILE, count + valid_count)
-    print(f"Test quiz sent at: {datetime.now()} (Count: {count + valid_count})")
-
-
 def main():
     application = ApplicationBuilder().token(TOKEN_API).build()
     
     application.add_handler(CommandHandler('start', start_bot))
-    application.add_handler(CommandHandler('test', test_poll))
     application.add_handler(CommandHandler('restart_quiz', restart_quiz))
     
     IST = timezone(timedelta(hours=5, minutes=30))
