@@ -17,7 +17,7 @@ DATA_DIR = "data"
 COUNT_FILE = os.path.join(DATA_DIR, "quiz_sent_count.txt")
 QUIZ_CACHE_FILE = os.path.join(DATA_DIR, "quiz_cache.json")
 
-translator = Translator()
+translator = GoogleTranslator(source="en", target="gu")
 
 def load_txt(file_path):
     if not os.path.exists(file_path):
@@ -86,16 +86,15 @@ async def send_quiz(context: ContextTypes.DEFAULT_TYPE):
         return
 
     try:
-        texts_to_translate = [quiz["question"]] + quiz["options"] + [quiz["explanation"]]
-        translations = translator.translate(texts_to_translate, src="en", dest="gu")
-        gujarati_question = translations[0].text
-        gujarati_options = [t.text for t in translations[1:-1]]
-        gujarati_explanation = translations[-1].text
+        gujarati_question = translator.translate(quiz["question"])
+        gujarati_options = [translator.translate(opt) for opt in quiz["options"]]
+        gujarati_explanation = translator.translate(quiz["explanation"])
     except Exception as e:
-        print(f"Batch translation error: {e}")
+        print(f"Translation error: {e}")
         gujarati_question = quiz["question"]
         gujarati_options = quiz["options"]
         gujarati_explanation = quiz["explanation"]
+
 
     await context.bot.send_poll(
         chat_id=CHAT_ID,
