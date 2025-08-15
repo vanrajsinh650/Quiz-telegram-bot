@@ -108,7 +108,9 @@ async def delete_system_messages(update: Update, context: ContextTypes.DEFAULT_T
 
 def main():
     os.makedirs(DATA_DIR, exist_ok=True)
-    application = ApplicationBuilder().token(TOKEN_API).job_queue().build()
+    
+    application = ApplicationBuilder().token(TOKEN_API).build()
+    
     application.add_handler(CommandHandler('start', start_bot))
     application.add_handler(CommandHandler('restart_quiz', restart_quiz))
     application.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, delete_system_messages))
