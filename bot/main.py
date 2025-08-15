@@ -1,12 +1,11 @@
-from datetime import time, timezone, timedelta, datetime
-from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, MessageHandler, filters
-from dotenv import load_dotenv
-from deep_translator import GoogleTranslator
 import os
 import json
 import requests
-import asyncio
+from datetime import time, timezone, timedelta, datetime
+from telegram import Update
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, MessageHandler, filters, JobQueue
+from dotenv import load_dotenv
+from deep_translator import GoogleTranslator
 
 load_dotenv()
 
@@ -65,8 +64,10 @@ async def send_quiz(context: ContextTypes.DEFAULT_TYPE):
     count = load_txt(COUNT_FILE)
     if count >= 8:
         return
+
     today_str = datetime.now().strftime("%Y-%m-%d")
     cache = load_json(QUIZ_CACHE_FILE)
+
     if cache.get("date") == today_str:
         quiz = cache["quiz"]
     else:
@@ -74,8 +75,7 @@ async def send_quiz(context: ContextTypes.DEFAULT_TYPE):
         if not quizzes or not isinstance(quizzes, list):
             return
         quiz = quizzes[0]
-        cache = {"date": today_str, "quiz": quiz}
-        save_json(QUIZ_CACHE_FILE, cache)
+        save_json(QUIZ_CACHE_FILE, {"date": today_str, "quiz": quiz})
 
     try:
         gujarati_question = translator.translate(quiz["question"])
@@ -95,6 +95,7 @@ async def send_quiz(context: ContextTypes.DEFAULT_TYPE):
         explanation=gujarati_explanation,
         is_anonymous=True
     )
+
     save_txt(COUNT_FILE, count + 1)
 
 async def reset_daily_counter(context: ContextTypes.DEFAULT_TYPE):
@@ -106,7 +107,7 @@ async def delete_system_messages(update: Update, context: ContextTypes.DEFAULT_T
     except:
         pass
 
-async def main():
+def main():
     os.makedirs(DATA_DIR, exist_ok=True)
     application = ApplicationBuilder().token(TOKEN_API).build()
 
@@ -118,14 +119,11 @@ async def main():
     IST = timezone(timedelta(hours=5, minutes=30))
     job_queue = application.job_queue
     job_queue.run_daily(reset_daily_counter, time(hour=8, minute=0, tzinfo=IST))
+
     for hour in range(8, 24, 2):
         job_queue.run_daily(send_quiz, time(hour=hour, minute=0, tzinfo=IST))
 
-    await application.initialize()
-    await application.start()
-    await application.updater.start_polling()
-    await application.updater.idle()
+    application.run_polling()
 
 if __name__ == "__main__":
-    import asyncio
-    asyncio.run(main())
+    main()
