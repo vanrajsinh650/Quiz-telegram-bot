@@ -113,26 +113,23 @@ async def send_quiz(context: CallbackContext):
 async def reset_daily_counter(context: CallbackContext):
     save_txt(COUNT_FILE, 0)
 
+async def setup_jobs(application):
+    IST = timezone(timedelta(hours=5, minutes=30))
+    application.job_queue.run_daily(reset_daily_counter, time(hour=8, minute=0, tzinfo=IST))
+    for hour in range(8, 24, 2):
+        application.job_queue.run_daily(send_quiz, time(hour=hour, minute=0, tzinfo=IST))
+
 async def main():
     os.makedirs(DATA_DIR, exist_ok=True)
 
-    application = ApplicationBuilder().token(TOKEN_API).build()
+    application = ApplicationBuilder().token(TOKEN_API).post_init(setup_jobs).build()
 
     application.add_handler(CommandHandler("start", start_bot))
     application.add_handler(CommandHandler("restart_quiz", restart_quiz))
     application.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, delete_system_messages))
     application.add_handler(MessageHandler(filters.StatusUpdate.LEFT_CHAT_MEMBER, delete_system_messages))
 
-    IST = timezone(timedelta(hours=5, minutes=30))
-    job_queue = application.job_queue
-    job_queue.run_daily(reset_daily_counter, time(hour=8, minute=0, tzinfo=IST))
-    for hour in range(8, 24, 2):
-        job_queue.run_daily(send_quiz, time(hour=hour, minute=0, tzinfo=IST))
-
-    await application.initialize()
-    await application.start()
-    await application.updater.start_polling()
-    await application.idle()
+    await application.run_polling()
 
 if __name__ == "__main__":
     asyncio.run(main())
