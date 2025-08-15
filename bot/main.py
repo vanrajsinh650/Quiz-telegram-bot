@@ -6,6 +6,7 @@ from deep_translator import GoogleTranslator
 import os
 import json
 import requests
+import asyncio
 
 load_dotenv()
 
@@ -58,8 +59,7 @@ def fetch_daily_quiz():
     response = requests.get(url, headers=headers)
     if response.status_code == 200:
         return response.json()
-    else:
-        return []
+    return []
 
 async def send_quiz(context: ContextTypes.DEFAULT_TYPE):
     count = load_txt(COUNT_FILE)
@@ -76,8 +76,7 @@ async def send_quiz(context: ContextTypes.DEFAULT_TYPE):
         quiz = quizzes[0]
         cache = {"date": today_str, "quiz": quiz}
         save_json(QUIZ_CACHE_FILE, cache)
-    if len(quiz["question"]) > 300 or len(quiz["explanation"]) > 200:
-        return
+
     try:
         gujarati_question = translator.translate(quiz["question"])
         gujarati_options = [translator.translate(opt) for opt in quiz["options"]]
@@ -86,6 +85,7 @@ async def send_quiz(context: ContextTypes.DEFAULT_TYPE):
         gujarati_question = quiz["question"]
         gujarati_options = quiz["options"]
         gujarati_explanation = quiz["explanation"]
+
     await context.bot.send_poll(
         chat_id=CHAT_ID,
         question=gujarati_question,
@@ -106,21 +106,26 @@ async def delete_system_messages(update: Update, context: ContextTypes.DEFAULT_T
     except:
         pass
 
-def main():
+async def main():
     os.makedirs(DATA_DIR, exist_ok=True)
-    
     application = ApplicationBuilder().token(TOKEN_API).build()
-    
+
     application.add_handler(CommandHandler('start', start_bot))
     application.add_handler(CommandHandler('restart_quiz', restart_quiz))
     application.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, delete_system_messages))
     application.add_handler(MessageHandler(filters.StatusUpdate.LEFT_CHAT_MEMBER, delete_system_messages))
+
     IST = timezone(timedelta(hours=5, minutes=30))
     job_queue = application.job_queue
     job_queue.run_daily(reset_daily_counter, time(hour=8, minute=0, tzinfo=IST))
     for hour in range(8, 24, 2):
         job_queue.run_daily(send_quiz, time(hour=hour, minute=0, tzinfo=IST))
-    application.run_polling()
+
+    await application.initialize()
+    await application.start()
+    await application.updater.start_polling()
+    await application.updater.idle()
 
 if __name__ == "__main__":
-    main()
+    import asyncio
+    asyncio.run(main())
