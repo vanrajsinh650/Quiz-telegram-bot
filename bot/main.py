@@ -1,12 +1,11 @@
 from datetime import time, timezone, timedelta, datetime
 from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, MessageHandler, filters, CallbackContext
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes, CallbackContext
 from dotenv import load_dotenv
 from deep_translator import GoogleTranslator
 import os
 import json
 import requests
-import asyncio
 
 load_dotenv()
 
@@ -119,9 +118,8 @@ async def setup_jobs(application):
     for hour in range(8, 24, 2):
         application.job_queue.run_daily(send_quiz, time(hour=hour, minute=0, tzinfo=IST))
 
-async def main():
+def main():
     os.makedirs(DATA_DIR, exist_ok=True)
-
     application = ApplicationBuilder().token(TOKEN_API).post_init(setup_jobs).build()
 
     application.add_handler(CommandHandler("start", start_bot))
@@ -129,7 +127,7 @@ async def main():
     application.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, delete_system_messages))
     application.add_handler(MessageHandler(filters.StatusUpdate.LEFT_CHAT_MEMBER, delete_system_messages))
 
-    await application.run_polling()
+    application.run_polling()
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
