@@ -1,11 +1,12 @@
+from datetime import time, timezone, timedelta, datetime
+from telegram import Update
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, MessageHandler, filters, CallbackContext
+from dotenv import load_dotenv
+from deep_translator import GoogleTranslator
 import os
 import json
 import requests
-from datetime import time, timezone, timedelta, datetime
-from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, MessageHandler, filters, JobQueue
-from dotenv import load_dotenv
-from deep_translator import GoogleTranslator
+import asyncio
 
 load_dotenv()
 
@@ -22,32 +23,40 @@ translator = GoogleTranslator(source="en", target="gu")
 def load_txt(file_path):
     if not os.path.exists(file_path):
         return 0
-    with open(file_path, "r", encoding="utf-8") as file:
-        return int(file.read().strip() or 0)
+    with open(file_path, "r", encoding="utf-8") as f:
+        return int(f.read().strip() or 0)
 
 def save_txt(file_path, value):
-    with open(file_path, "w", encoding="utf-8") as file:
-        file.write(str(value))
+    with open(file_path, "w", encoding="utf-8") as f:
+        f.write(str(value))
 
 def load_json(file_path):
     if not os.path.exists(file_path):
         return {}
-    with open(file_path, "r", encoding="utf-8") as file:
-        return json.load(file)
+    with open(file_path, "r", encoding="utf-8") as f:
+        return json.load(f)
 
 def save_json(file_path, data):
-    with open(file_path, "w", encoding="utf-8") as file:
-        json.dump(data, file, ensure_ascii=False, indent=2)
+    with open(file_path, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
 
-async def restart_quiz(update, context):
-    save_txt(COUNT_FILE, 0)
-    await context.bot.send_message(update.effective_chat.id, text="Quiz has been restarted.")
-
-async def start_bot(update, context):
-    await context.bot.send_message(
-        update.effective_chat.id,
-        text="🙏 સ્વાગત છે! તમે હવે 'પ્રગતિ સેતુ ક્વિઝ બોટ' સાથે જોડાયા છો.\nદરરોજ નવા પ્રશ્નો માટે તૈયાર રહો! 📚\n\n📲 વધુ શૈક્ષણિક કન્ટેન્ટ માટે 'Pragati Setu' એપ ડાઉનલોડ કરો.\n\nસફળ અભ્યાસ માટે શુભેચ્છાઓ! 🚀"
+async def start_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "🙏 સ્વાગત છે! તમે હવે 'પ્રગતિ સેતુ ક્વિઝ બોટ' સાથે જોડાયા છો.\n"
+        "દરરોજ નવા પ્રશ્નો માટે તૈયાર રહો! 📚\n\n"
+        "📲 વધુ શૈક્ષણિક કન્ટેન્ટ માટે 'Pragati Setu' એપ ડાઉનલોડ કરો.\n"
+        "સફળ અભ્યાસ માટે શુભેચ્છાઓ! 🚀"
     )
+
+async def restart_quiz(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    save_txt(COUNT_FILE, 0)
+    await update.message.reply_text("Quiz has been restarted.")
+
+async def delete_system_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        await update.message.delete()
+    except:
+        pass
 
 def fetch_daily_quiz():
     url = "https://current-affairs-of-india.p.rapidapi.com/today-quiz"
@@ -60,7 +69,7 @@ def fetch_daily_quiz():
         return response.json()
     return []
 
-async def send_quiz(context: ContextTypes.DEFAULT_TYPE):
+async def send_quiz(context: CallbackContext):
     count = load_txt(COUNT_FILE)
     if count >= 8:
         return
@@ -77,11 +86,14 @@ async def send_quiz(context: ContextTypes.DEFAULT_TYPE):
         quiz = quizzes[0]
         save_json(QUIZ_CACHE_FILE, {"date": today_str, "quiz": quiz})
 
+    if len(quiz["question"]) > 300 or len(quiz["explanation"]) > 200:
+        return
+
     try:
         gujarati_question = translator.translate(quiz["question"])
         gujarati_options = [translator.translate(opt) for opt in quiz["options"]]
         gujarati_explanation = translator.translate(quiz["explanation"])
-    except:
+    except Exception:
         gujarati_question = quiz["question"]
         gujarati_options = quiz["options"]
         gujarati_explanation = quiz["explanation"]
@@ -98,32 +110,29 @@ async def send_quiz(context: ContextTypes.DEFAULT_TYPE):
 
     save_txt(COUNT_FILE, count + 1)
 
-async def reset_daily_counter(context: ContextTypes.DEFAULT_TYPE):
+async def reset_daily_counter(context: CallbackContext):
     save_txt(COUNT_FILE, 0)
 
-async def delete_system_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        await update.message.delete()
-    except:
-        pass
-
-def main():
+async def main():
     os.makedirs(DATA_DIR, exist_ok=True)
+
     application = ApplicationBuilder().token(TOKEN_API).build()
 
-    application.add_handler(CommandHandler('start', start_bot))
-    application.add_handler(CommandHandler('restart_quiz', restart_quiz))
+    application.add_handler(CommandHandler("start", start_bot))
+    application.add_handler(CommandHandler("restart_quiz", restart_quiz))
     application.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, delete_system_messages))
     application.add_handler(MessageHandler(filters.StatusUpdate.LEFT_CHAT_MEMBER, delete_system_messages))
 
     IST = timezone(timedelta(hours=5, minutes=30))
     job_queue = application.job_queue
     job_queue.run_daily(reset_daily_counter, time(hour=8, minute=0, tzinfo=IST))
-
     for hour in range(8, 24, 2):
         job_queue.run_daily(send_quiz, time(hour=hour, minute=0, tzinfo=IST))
 
-    application.run_polling()
+    await application.initialize()
+    await application.start()
+    await application.updater.start_polling()
+    await application.idle()
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
