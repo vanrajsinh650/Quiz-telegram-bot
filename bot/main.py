@@ -5,20 +5,17 @@ from dotenv import load_dotenv
 import asyncio
 import os
 import json
+import requests
+import http.client
 
 load_dotenv()
 
 TOKEN_API = os.getenv("TOKEN_API")
 CHAT_ID = int(os.getenv("CHAT_ID"))
+X_RAPIDAPI_KEY= os.getenv("X_RAPIDAPI_KEY")
 
 DATA_DIR = "data"
-QUESTION_FILE = os.path.join(DATA_DIR, "question.json")
-LAST_POLL_FILE = os.path.join(DATA_DIR, "last_poll.txt")
 COUNT_FILE = os.path.join(DATA_DIR, "quiz_sent_count.txt")
-
-def load_question():
-    with open(QUESTION_FILE, "r", encoding="utf-8") as file:
-        return json.load(file)
 
 def load_txt(file_path):
     with open(file_path, "r", encoding="utf-8") as file:
@@ -31,7 +28,6 @@ def save_txt(file_path, value):
 async def restart_quiz(update, context):
     chat_id = update.effective_chat.id
     await context.bot.send_message(chat_id, text="Quiz has been restarted.")
-    save_txt(LAST_POLL_FILE, 0)
     save_txt(COUNT_FILE, 0)
 
 async def start_bot(update, context):
@@ -40,29 +36,45 @@ async def start_bot(update, context):
         chat_id,
         text="🙏 સ્વાગત છે! તમે હવે 'પ્રગતિ સેતુ ક્વિઝ બોટ' સાથે જોડાયા છો.\nદરરોજ નવા પ્રશ્નો માટે તૈયાર રહો! 📚\n\n📲 વધુ શૈક્ષણિક કન્ટેન્ટ માટે 'Pragati Setu' એપ ડાઉનલોડ કરો.\n\nસફળ અભ્યાસ માટે શુભેચ્છાઓ! 🚀"
     )
+    
+def fetch_daily_quiz():
+    url = "https://current-affairs-of-india.p.rapidapi.com/today-quiz"
+    headers = {
+        "X-RapidAPI-Key": X_RAPIDAPI_KEY,
+        "X-RapidAPI-Host": "current-affairs-of-india.p.rapidapi.com"
+    }
+    response = requests.get(url, headers=headers)
+    if response.status_code == 200:
+        return response.json()
+    else:
+        print(f"Error fetching quiz: {response.status_code}")
+        return []
 
 async def send_quiz(context: ContextTypes.DEFAULT_TYPE):
     count = load_txt(COUNT_FILE)
-    if count >= 5:
+    if count >= 8:
         return
-    questions = load_question()
-    last_index = load_txt(LAST_POLL_FILE)
-    total_questions = len(questions)
-    index = last_index % total_questions
-    quiz = questions[index]
+    
+    quizzes = fetch_daily_quiz()
+    if not quizzes or not isinstance(quizzes, list):
+        print("No quiz available, skipping...")
+        return
+    
+    quiz = quizzes[0]
+    
     if len(quiz["question"]) > 300 or len(quiz["explanation"]) > 200:
-        save_txt(LAST_POLL_FILE, index + 1)
         return
+    
     await context.bot.send_poll(
         chat_id=CHAT_ID,
         question=quiz["question"],
         options=quiz["options"],
-        correct_option_id=quiz["correct_option_id"],
-        type=quiz["type"],
+        correct_option_id=quiz["correctIndex"],
+        type="quiz",
         explanation=quiz["explanation"],
         is_anonymous=True
     )
-    save_txt(LAST_POLL_FILE, index + 1)
+    
     save_txt(COUNT_FILE, count + 1)
     print(f"Quiz sent at: {datetime.now()} (Count: {count + 1})")
 
