@@ -2,7 +2,7 @@ from datetime import time, timezone, timedelta, datetime
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, MessageHandler, filters
 from dotenv import load_dotenv
-from googletrans import Translator
+from deep_translator import GoogleTranslator
 import os
 import json
 import requests
