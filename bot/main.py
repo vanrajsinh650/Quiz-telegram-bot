@@ -117,6 +117,7 @@ async def handle_system_messages(bot: Bot, update: Update):
 
 async def main_loop():
     bot = Bot(token=TOKEN_API)
+    last_update_id = None  
     last_quiz_hour = None
 
     while True:
