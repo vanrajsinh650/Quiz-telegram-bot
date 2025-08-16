@@ -32,7 +32,7 @@ def save_txt(file_path, value):
         f.write(str(value))
 
 def load_json(file_path):
-    if not os.path.exists(file_path):
+    if not os.path.exists(file_path) or os.stat(file_path).st_size == 0:
         return {}
     with open(file_path, "r", encoding="utf-8") as f:
         return json.load(f)
@@ -117,11 +117,21 @@ async def handle_system_messages(bot: Bot, update: Update):
 
 async def main_loop():
     bot = Bot(token=TOKEN_API)
-    last_update_id = None  
+    await bot.delete_webhook()  # remove webhook
+
+    # get last update_id to avoid conflicts
+    updates = await bot.get_updates(timeout=10)
+    last_update_id = updates[-1].update_id + 1 if updates else None
     last_quiz_hour = None
 
     while True:
-        updates = await bot.get_updates(offset=last_update_id, timeout=10)
+        try:
+            updates = await bot.get_updates(offset=last_update_id, timeout=10)
+        except telegram.error.Conflict:
+            print("Conflict detected. Sleeping 10s...")
+            await asyncio.sleep(10)
+            continue
+
         for update in updates:
             last_update_id = update.update_id + 1
             await handle_system_messages(bot, update)
