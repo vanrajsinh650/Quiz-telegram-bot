@@ -54,25 +54,36 @@ def save_used_question(question_text):
     data[today].append(question_text)
     save_json(USED_QUESTIONS_FILE, data)
 
+import requests
+import random
+
 def fetch_daily_quiz():
-    url = "https://opentdb.com/api.php?amount=1&type=multiple"
+    url = "https://the-trivia-api.com/v2/questions?limit=1&region=IN&type=multiple"
+    
     try:
         response = requests.get(url, timeout=10)
+        response.raise_for_status()
         data = response.json()
-        if data["response_code"] == 0:
-            question = data["results"][0]
-            options = question["incorrect_answers"] + [question["correct_answer"]]
-            random.shuffle(options)
-            quiz = {
-                "question": question["question"],
-                "options": options,
-                "correctIndex": options.index(question["correct_answer"]),
-                "explanation": "Answer: " + question["correct_answer"]
-            }
-            return quiz
+        
+        if not data:
+            print("No quiz data returned.")
+            return None
+
+        question_data = data[0]
+        options = question_data['incorrectAnswers'] + [question_data['correctAnswer']]
+        random.shuffle(options)
+
+        quiz = {
+            "question": question_data["question"]["text"],
+            "options": options,
+            "correctIndex": options.index(question_data["correctAnswer"]),
+            "explanation": f"Answer: {question_data['correctAnswer']}"
+        }
+        return quiz
+
     except Exception as e:
-        print("Failed to fetch quiz:", e)
-    return None
+        print("Error fetching trivia quiz:", e)
+        return None
 
 async def send_quiz(bot: Bot):
     count = load_txt(COUNT_FILE)
