@@ -72,17 +72,12 @@ async def send_quiz(bot: Bot):
     today_str = datetime.now().strftime("%Y-%m-%d")
     cache = load_json(QUIZ_CACHE_FILE)
 
-    if cache.get("date") == today_str:
-        quiz = cache["quiz"]
-        print("Using cached quiz")
-    else:
-        quizzes = fetch_daily_quiz()
-        if not quizzes:
-            print("No quizzes available to send.")
-            return
-        quiz = quizzes[0]
-        save_json(QUIZ_CACHE_FILE, {"date": today_str, "quiz": quiz})
-        print("Saved new quiz to cache")
+    quizzes = fetch_daily_quiz()
+    if not quizzes:
+        print("No quizzes available to send.")
+        return
+    quiz = quizzes[0]
+
 
     try:
         gujarati_question = translator.translate(quiz["question"])
