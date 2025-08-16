@@ -1,6 +1,7 @@
-from datetime import time, timezone, timedelta, datetime
-from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes, CallbackContext
+import asyncio
+from datetime import datetime
+from telegram import Bot, Update
+from telegram.error import TelegramError
 from dotenv import load_dotenv
 from deep_translator import GoogleTranslator
 import os
@@ -18,6 +19,7 @@ COUNT_FILE = os.path.join(DATA_DIR, "quiz_sent_count.txt")
 QUIZ_CACHE_FILE = os.path.join(DATA_DIR, "quiz_cache.json")
 
 translator = GoogleTranslator(source="en", target="gu")
+os.makedirs(DATA_DIR, exist_ok=True)
 
 def load_txt(file_path):
     if not os.path.exists(file_path):
@@ -39,36 +41,18 @@ def save_json(file_path, data):
     with open(file_path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
-async def start_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "🙏 સ્વાગત છે! તમે હવે 'પ્રગતિ સેતુ ક્વિઝ બોટ' સાથે જોડાયા છો.\n"
-        "દરરોજ નવા પ્રશ્નો માટે તૈયાર રહો! 📚\n\n"
-        "📲 વધુ શૈક્ષણિક કન્ટેન્ટ માટે 'Pragati Setu' એપ ડાઉનલોડ કરો.\n"
-        "સફળ અભ્યાસ માટે શુભેચ્છાઓ! 🚀"
-    )
-
-async def restart_quiz(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    save_txt(COUNT_FILE, 0)
-    await update.message.reply_text("Quiz has been restarted.")
-
-async def delete_system_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        await update.message.delete()
-    except:
-        pass
-
 def fetch_daily_quiz():
     url = "https://current-affairs-of-india.p.rapidapi.com/today-quiz"
     headers = {
         "X-RapidAPI-Key": X_RAPIDAPI_KEY,
-        "X-RapidAPI-Host": "current-affairs-of-india.p.rapidapi.com"
+        "X-RapidAPI-Host": "current-affairs-of-india.p.rapidapi.com",
     }
     response = requests.get(url, headers=headers)
     if response.status_code == 200:
         return response.json()
     return []
 
-async def send_quiz(context: CallbackContext):
+async def send_quiz(bot: Bot):
     count = load_txt(COUNT_FILE)
     if count >= 8:
         return
@@ -97,38 +81,51 @@ async def send_quiz(context: CallbackContext):
         gujarati_options = quiz["options"]
         gujarati_explanation = quiz["explanation"]
 
-    await context.bot.send_poll(
+    await bot.send_poll(
         chat_id=CHAT_ID,
         question=gujarati_question,
         options=gujarati_options,
         correct_option_id=quiz["correctIndex"],
         type="quiz",
         explanation=gujarati_explanation,
-        is_anonymous=True
+        is_anonymous=True,
     )
-
     save_txt(COUNT_FILE, count + 1)
 
-async def reset_daily_counter(context: CallbackContext):
+async def reset_daily_counter():
     save_txt(COUNT_FILE, 0)
 
-async def setup_jobs(application):
-    IST = timezone(timedelta(hours=5, minutes=30))
-    application.job_queue.run_daily(reset_daily_counter, time(hour=8, minute=0, tzinfo=IST))
-    for hour in range(8, 24, 2):
-        application.job_queue.run_daily(send_quiz, time(hour=hour, minute=0, tzinfo=IST))
+async def handle_start(bot: Bot, update: Update):
+    try:
+        await bot.send_message(
+            chat_id=update.message.chat_id,
+            text="🙏 સ્વાગત છે! તમે હવે 'પ્રગતિ સેતુ ક્વિઝ બોટ' સાથે જોડાયા છો.\n"
+                 "દરરોજ નવા પ્રશ્નો માટે તૈયાર રહો! 📚\n\n"
+                 "📲 વધુ શૈક્ષણિક કન્ટેન્ટ માટે 'Pragati Setu' એપ ડાઉનલોડ કરો.\n"
+                 "સફળ અભ્યાસ માટે શુભેચ્છાઓ! 🚀"
+        )
+    except TelegramError:
+        pass
 
-def main():
-    os.makedirs(DATA_DIR, exist_ok=True)
-    application = ApplicationBuilder().token(TOKEN_API).post_init(setup_jobs).build()
+async def main_loop():
+    bot = Bot(token=TOKEN_API)
+    last_update_id = None
 
-    application.add_handler(CommandHandler("start", start_bot))
-    application.add_handler(CommandHandler("restart_quiz", restart_quiz))
-    application.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, delete_system_messages))
-    application.add_handler(MessageHandler(filters.StatusUpdate.LEFT_CHAT_MEMBER, delete_system_messages))
+    while True:
+        updates = await bot.get_updates(offset=last_update_id, timeout=10)
+        for update in updates:
+            last_update_id = update.update_id + 1
+            if hasattr(update, "message") and update.message.text:
+                if update.message.text.startswith("/start"):
+                    await handle_start(bot, update)
 
-    application.run_polling()
+        now = datetime.now()
+        if now.hour == 8 and now.minute == 0:
+            await reset_daily_counter()
+        if now.hour in range(8, 22, 2) and now.minute == 0:
+            await send_quiz(bot)
 
+        await asyncio.sleep(60)  
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main_loop())
