@@ -16,7 +16,7 @@ CHAT_ID = int(os.getenv("CHAT_ID"))
 
 DATA_DIR = "data"
 COUNT_FILE = os.path.join(DATA_DIR, "quiz_sent_count.txt")
-QUIZ_CACHE_FILE = os.path.join(DATA_DIR, "quiz_cache.json")
+USED_QUESTIONS_FILE = os.path.join(DATA_DIR, "used_questions.json")
 
 translator = GoogleTranslator(source="en", target="gu")
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -41,6 +41,19 @@ def save_json(file_path, data):
     with open(file_path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
+def load_used_questions():
+    data = load_json(USED_QUESTIONS_FILE)
+    today = datetime.now().strftime("%Y-%m-%d")
+    return data.get(today, [])
+
+def save_used_question(question_text):
+    data = load_json(USED_QUESTIONS_FILE)
+    today = datetime.now().strftime("%Y-%m-%d")
+    if today not in data:
+        data[today] = []
+    data[today].append(question_text)
+    save_json(USED_QUESTIONS_FILE, data)
+
 def fetch_daily_quiz():
     url = "https://opentdb.com/api.php?amount=1&type=multiple"
     try:
@@ -56,12 +69,10 @@ def fetch_daily_quiz():
                 "correctIndex": options.index(question["correct_answer"]),
                 "explanation": "Answer: " + question["correct_answer"]
             }
-            return [quiz]
-        else:
-            return []
+            return quiz
     except Exception as e:
         print("Failed to fetch quiz:", e)
-        return []
+    return None
 
 async def send_quiz(bot: Bot):
     count = load_txt(COUNT_FILE)
@@ -69,15 +80,21 @@ async def send_quiz(bot: Bot):
     if count >= 8:
         return
 
-    today_str = datetime.now().strftime("%Y-%m-%d")
-    cache = load_json(QUIZ_CACHE_FILE)
+    used_questions = load_used_questions()
+    attempts = 0
+    quiz = None
 
-    quizzes = fetch_daily_quiz()
-    if not quizzes:
-        print("No quizzes available to send.")
+    while attempts < 5:
+        candidate = fetch_daily_quiz()
+        if candidate and candidate["question"] not in used_questions:
+            quiz = candidate
+            save_used_question(candidate["question"])
+            break
+        attempts += 1
+
+    if not quiz:
+        print("Couldn't find a new quiz after several attempts.")
         return
-    quiz = quizzes[0]
-
 
     try:
         gujarati_question = translator.translate(quiz["question"])
@@ -162,6 +179,7 @@ async def main_loop():
                     await handle_start(bot, update)
 
         now = datetime.now()
+
         # Reset daily counter at 8 AM
         if now.hour == 8 and last_quiz_hour != 8:
             await reset_daily_counter()
