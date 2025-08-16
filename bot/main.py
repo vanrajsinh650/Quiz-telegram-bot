@@ -106,6 +106,14 @@ async def handle_start(bot: Bot, update: Update):
         )
     except TelegramError:
         pass
+    
+async def handle_system_messages(bot: Bot, update: Update):
+    try:
+        if getattr(update, "message", None):
+            if getattr(update.message, "new_chat_members", None) or getattr(update.message, "left_chat_member", None):
+                await update.message.delete()
+    except TelegramError:
+        pass
 
 async def main_loop():
     bot = Bot(token=TOKEN_API)
@@ -115,6 +123,7 @@ async def main_loop():
         updates = await bot.get_updates(offset=last_update_id, timeout=10)
         for update in updates:
             last_update_id = update.update_id + 1
+            await handle_system_messages(bot, update)
             if getattr(update, "message", None) and getattr(update.message, "text", None):
                 if update.message.text.startswith("/start"):
                     await handle_start(bot, update)
