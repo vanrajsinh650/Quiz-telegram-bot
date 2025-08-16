@@ -115,7 +115,7 @@ async def main_loop():
         updates = await bot.get_updates(offset=last_update_id, timeout=10)
         for update in updates:
             last_update_id = update.update_id + 1
-            if hasattr(update, "message") and update.message.text:
+            if getattr(update, "message", None) and getattr(update.message, "text", None):
                 if update.message.text.startswith("/start"):
                     await handle_start(bot, update)
 
@@ -125,7 +125,8 @@ async def main_loop():
         if now.hour in range(8, 22, 2) and now.minute == 0:
             await send_quiz(bot)
 
-        await asyncio.sleep(60)  
+        await asyncio.sleep(60)
+
 
 if __name__ == "__main__":
     asyncio.run(main_loop())
