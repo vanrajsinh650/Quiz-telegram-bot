@@ -1,18 +1,18 @@
 import asyncio
 from datetime import datetime
 from telegram import Bot, Update
-from telegram.error import TelegramError
+from telegram.error import TelegramError, Conflict
 from dotenv import load_dotenv
 from deep_translator import GoogleTranslator
 import os
 import json
 import requests
+import random
 
 load_dotenv()
 
 TOKEN_API = os.getenv("TOKEN_API")
 CHAT_ID = int(os.getenv("CHAT_ID"))
-X_RAPIDAPI_KEY = os.getenv("X_RAPIDAPI_KEY")
 
 DATA_DIR = "data"
 COUNT_FILE = os.path.join(DATA_DIR, "quiz_sent_count.txt")
@@ -42,18 +42,30 @@ def save_json(file_path, data):
         json.dump(data, f, ensure_ascii=False, indent=2)
 
 def fetch_daily_quiz():
-    url = "https://current-affairs-of-india.p.rapidapi.com/today-quiz"
-    headers = {
-        "X-RapidAPI-Key": X_RAPIDAPI_KEY,
-        "X-RapidAPI-Host": "current-affairs-of-india.p.rapidapi.com",
-    }
-    response = requests.get(url, headers=headers)
-    if response.status_code == 200:
-        return response.json()
-    return []
+    url = "https://opentdb.com/api.php?amount=1&type=multiple"
+    try:
+        response = requests.get(url, timeout=10)
+        data = response.json()
+        if data["response_code"] == 0:
+            question = data["results"][0]
+            options = question["incorrect_answers"] + [question["correct_answer"]]
+            random.shuffle(options)
+            quiz = {
+                "question": question["question"],
+                "options": options,
+                "correctIndex": options.index(question["correct_answer"]),
+                "explanation": "Answer: " + question["correct_answer"]
+            }
+            return [quiz]
+        else:
+            return []
+    except Exception as e:
+        print("Failed to fetch quiz:", e)
+        return []
 
 async def send_quiz(bot: Bot):
     count = load_txt(COUNT_FILE)
+    print("Current sent count:", count)
     if count >= 8:
         return
 
@@ -62,38 +74,45 @@ async def send_quiz(bot: Bot):
 
     if cache.get("date") == today_str:
         quiz = cache["quiz"]
+        print("Using cached quiz")
     else:
         quizzes = fetch_daily_quiz()
-        if not quizzes or not isinstance(quizzes, list):
+        if not quizzes:
+            print("No quizzes available to send.")
             return
         quiz = quizzes[0]
         save_json(QUIZ_CACHE_FILE, {"date": today_str, "quiz": quiz})
-
-    if len(quiz["question"]) > 300 or len(quiz["explanation"]) > 200:
-        return
+        print("Saved new quiz to cache")
 
     try:
         gujarati_question = translator.translate(quiz["question"])
         gujarati_options = [translator.translate(opt) for opt in quiz["options"]]
         gujarati_explanation = translator.translate(quiz["explanation"])
-    except Exception:
+        print("Translated quiz successfully")
+    except Exception as e:
+        print("Translation failed, using original:", e)
         gujarati_question = quiz["question"]
         gujarati_options = quiz["options"]
         gujarati_explanation = quiz["explanation"]
 
-    await bot.send_poll(
-        chat_id=CHAT_ID,
-        question=gujarati_question,
-        options=gujarati_options,
-        correct_option_id=quiz["correctIndex"],
-        type="quiz",
-        explanation=gujarati_explanation,
-        is_anonymous=True,
-    )
-    save_txt(COUNT_FILE, count + 1)
+    try:
+        await bot.send_poll(
+            chat_id=CHAT_ID,
+            question=gujarati_question,
+            options=gujarati_options,
+            correct_option_id=quiz["correctIndex"],
+            type="quiz",
+            explanation=gujarati_explanation,
+            is_anonymous=True,
+        )
+        print("Quiz sent successfully!")
+        save_txt(COUNT_FILE, count + 1)
+    except Exception as e:
+        print("Failed to send quiz:", e)
 
 async def reset_daily_counter():
     save_txt(COUNT_FILE, 0)
+    print("Daily counter reset to 0")
 
 async def handle_start(bot: Bot, update: Update):
     try:
@@ -104,32 +123,40 @@ async def handle_start(bot: Bot, update: Update):
                  "📲 વધુ શૈક્ષણિક કન્ટેન્ટ માટે 'Pragati Setu' એપ ડાઉનલોડ કરો.\n"
                  "સફળ અભ્યાસ માટે શુભેચ્છાઓ! 🚀"
         )
-    except TelegramError:
-        pass
-    
+        print("/start message sent to", update.message.chat_id)
+    except TelegramError as e:
+        print("Failed to send /start message:", e)
+
 async def handle_system_messages(bot: Bot, update: Update):
     try:
         if getattr(update, "message", None):
             if getattr(update.message, "new_chat_members", None) or getattr(update.message, "left_chat_member", None):
                 await update.message.delete()
-    except TelegramError:
-        pass
+                print("Deleted system message")
+    except TelegramError as e:
+        print("Failed to delete system message:", e)
 
 async def main_loop():
     bot = Bot(token=TOKEN_API)
-    await bot.delete_webhook()  # remove webhook
+    await bot.delete_webhook()
+    print("Webhook removed, starting bot...")
 
-    # get last update_id to avoid conflicts
-    updates = await bot.get_updates(timeout=10)
-    last_update_id = updates[-1].update_id + 1 if updates else None
+    await bot.get_updates(offset=-1)
+    last_update_id = None
     last_quiz_hour = None
+    print("Cleared old updates, starting fresh.")
 
     while True:
         try:
             updates = await bot.get_updates(offset=last_update_id, timeout=10)
-        except telegram.error.Conflict:
-            print("Conflict detected. Sleeping 10s...")
+        except Conflict:
+            print("Conflict detected. Sleeping 10s and retrying...")
             await asyncio.sleep(10)
+            last_update_id = None
+            continue
+        except Exception as e:
+            print("Error fetching updates:", e)
+            await asyncio.sleep(5)
             continue
 
         for update in updates:
@@ -140,17 +167,16 @@ async def main_loop():
                     await handle_start(bot, update)
 
         now = datetime.now()
-
+        # Reset daily counter at 8 AM
         if now.hour == 8 and last_quiz_hour != 8:
             await reset_daily_counter()
 
+        # Send quizzes every 2 hours from 8 AM to 10 PM
         if now.hour in range(8, 22, 2) and last_quiz_hour != now.hour:
             await send_quiz(bot)
             last_quiz_hour = now.hour
 
         await asyncio.sleep(30)
-
-
 
 if __name__ == "__main__":
     asyncio.run(main_loop())

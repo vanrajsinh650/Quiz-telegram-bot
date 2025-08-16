@@ -1,1 +1,14 @@
-{}
+{
+  "date": "2025-08-16",
+  "quiz": {
+    "question": "Which of these is NOT a song on The Beatles&#039; 1968 self titled album, also known as the White album?",
+    "options": [
+      "The Continuing Story of Bungalow Bill",
+      "Why Don&#039;t We Do It in the Road?",
+      "Everybody&#039;s Got Something to Hide Except Me and My Monkey",
+      "Being For The Benefit Of Mr. Kite!"
+    ],
+    "correctIndex": 3,
+    "explanation": "Answer: Being For The Benefit Of Mr. Kite!"
+  }
+}
