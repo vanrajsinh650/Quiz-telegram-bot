@@ -59,7 +59,7 @@ import random
 
 def fetch_daily_quiz():
     url = "https://the-trivia-api.com/v2/questions?limit=1&region=IN&type=multiple"
-    
+
     try:
         response = requests.get(url, timeout=10)
         response.raise_for_status()
@@ -70,14 +70,26 @@ def fetch_daily_quiz():
             return None
 
         question_data = data[0]
-        options = question_data['incorrectAnswers'] + [question_data['correctAnswer']]
+        correct_answer = question_data["correctAnswer"]
+        incorrect_answers = question_data["incorrectAnswers"]
+
+        # Avoid duplication or missing answer
+        options = list(set(incorrect_answers + [correct_answer]))
+        if correct_answer not in options:
+            print("Correct answer missing from options, skipping.")
+            return None
+
         random.shuffle(options)
+
+        if correct_answer not in options:
+            print("Correct answer lost after shuffle, skipping.")
+            return None
 
         quiz = {
             "question": question_data["question"]["text"],
             "options": options,
-            "correctIndex": options.index(question_data["correctAnswer"]),
-            "explanation": f"Answer: {question_data['correctAnswer']}"
+            "correctIndex": options.index(correct_answer),
+            "explanation": f"Answer: {correct_answer}"
         }
         return quiz
 
