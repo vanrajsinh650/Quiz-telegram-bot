@@ -117,24 +117,28 @@ async def handle_system_messages(bot: Bot, update: Update):
 
 async def main_loop():
     bot = Bot(token=TOKEN_API)
-    last_update_id = None
+    last_quiz_hour = None
 
-    while True:
-        updates = await bot.get_updates(offset=last_update_id, timeout=10)
-        for update in updates:
-            last_update_id = update.update_id + 1
-            await handle_system_messages(bot, update)
-            if getattr(update, "message", None) and getattr(update.message, "text", None):
-                if update.message.text.startswith("/start"):
-                    await handle_start(bot, update)
+while True:
+    updates = await bot.get_updates(offset=last_update_id, timeout=10)
+    for update in updates:
+        last_update_id = update.update_id + 1
+        await handle_system_messages(bot, update)
+        if getattr(update, "message", None) and getattr(update.message, "text", None):
+            if update.message.text.startswith("/start"):
+                await handle_start(bot, update)
 
-        now = datetime.now()
-        if now.hour == 8 and now.minute == 0:
-            await reset_daily_counter()
-        if now.hour in range(8, 22, 2) and now.minute == 0:
-            await send_quiz(bot)
+    now = datetime.now()
 
-        await asyncio.sleep(60)
+    if now.hour == 8 and last_quiz_hour != 8:
+        await reset_daily_counter()
+
+    if now.hour in range(8, 22, 2) and last_quiz_hour != now.hour:
+        await send_quiz(bot)
+        last_quiz_hour = now.hour
+
+    await asyncio.sleep(30)
+
 
 
 if __name__ == "__main__":
