@@ -182,6 +182,9 @@ async def main_loop():
     print("Cleared old updates, starting fresh.")
 
     while True:
+        
+        now = datetime.now()
+        
         try:
             updates = await bot.get_updates(offset=last_update_id, timeout=10)
         except Conflict:
@@ -201,7 +204,6 @@ async def main_loop():
                 if update.message.text.startswith("/start"):
                     await handle_start(bot, update)
 
-                now = datetime.now()
 
         # Reset daily counter at 8 AM (only once)
         if now.hour == 8 and (last_quiz_hour != "reset" or last_quiz_hour is None):
