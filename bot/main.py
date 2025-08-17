@@ -201,17 +201,21 @@ async def main_loop():
                 if update.message.text.startswith("/start"):
                     await handle_start(bot, update)
 
-        now = datetime.now()
+                now = datetime.now()
 
         # Reset daily counter at 8 AM (only once)
-        if now.hour == 8 and last_quiz_hour != "reset":
+        if now.hour == 8 and (last_quiz_hour != "reset" or last_quiz_hour is None):
             await reset_daily_counter()
             last_quiz_hour = "reset"
 
-        # Send quizzes every 2 hours from 8 AM to 10 PM
-        if now.hour in range(8, 22, 2) and last_quiz_hour != now.hour:
+        # Create a slot ID like "2025-08-17_08"
+        slot_id = f"{now.strftime('%Y-%m-%d')}_{now.hour}"
+
+        # Send quizzes every 2 hours from 8 AM to 10 PM (1 quiz per slot)
+        if now.hour in range(8, 22, 2) and last_quiz_hour != slot_id:
             await send_quiz(bot)
-            last_quiz_hour = now.hour
+            last_quiz_hour = slot_id
+
 
 
         await asyncio.sleep(30)
