@@ -100,7 +100,7 @@ def fetch_daily_quiz():
 async def send_quiz(bot: Bot):
     count = load_txt(COUNT_FILE)
     print("Current sent count:", count)
-    if count >= 8:
+    if count >= 7:
         return
 
     used_questions = load_used_questions()
