@@ -16,19 +16,20 @@ CHAT_ID = int(os.getenv("CHAT_ID"))
 DATA_DIR = "data"
 COUNT_FILE = os.path.join(DATA_DIR, "quiz_sent_count.txt")
 USED_QUESTIONS_FILE = os.path.join(DATA_DIR, "used_questions.json")
-LAST_SLOT_FILE = os.path.join(DATA_DIR, "last_quiz_slot.txt")
+RESET_FILE = os.path.join(DATA_DIR, "last_reset.txt")
+SLOT_FILE = os.path.join(DATA_DIR, "last_slot.txt")
 
 translator = GoogleTranslator(source="en", target="gu")
 os.makedirs(DATA_DIR, exist_ok=True)
 
 def load_txt(file_path):
     if not os.path.exists(file_path):
-        return 0
+        return None
     try:
         with open(file_path, "r", encoding="utf-8") as f:
-            return int(f.read().strip() or 0)
+            return f.read().strip()
     except Exception:
-        return 0
+        return None
 
 def save_txt(file_path, value):
     with open(file_path, "w", encoding="utf-8") as f:
@@ -60,84 +61,54 @@ def save_used_question(question_text):
     data[today].append(question_text)
     save_json(USED_QUESTIONS_FILE, data)
 
-def load_last_slot():
-    if not os.path.exists(LAST_SLOT_FILE):
-        return None
-    with open(LAST_SLOT_FILE, "r", encoding="utf-8") as f:
-        return f.read().strip() or None
-
-def save_last_slot(slot_id):
-    with open(LAST_SLOT_FILE, "w", encoding="utf-8") as f:
-        f.write(slot_id)
-
 def fetch_daily_quiz():
     url = "https://the-trivia-api.com/v2/questions?limit=1&region=IN&type=multiple"
     try:
         response = requests.get(url, timeout=10)
         response.raise_for_status()
         data = response.json()
-        
         if not data:
-            print("No quiz data returned.")
             return None
-
         question_data = data[0]
         correct_answer = question_data.get("correctAnswer")
         incorrect_answers = question_data.get("incorrectAnswers", [])
-
         if not correct_answer:
-            print("Missing correct answer in data.")
             return None
-
         options = list(set(incorrect_answers + [correct_answer]))
         random.shuffle(options)
-
         if correct_answer not in options:
-            print("Correct answer lost after shuffle, skipping.")
             return None
-
         return {
             "question": question_data["question"]["text"],
             "options": options,
             "correctIndex": options.index(correct_answer),
             "explanation": f"Answer: {correct_answer}"
         }
-
-    except Exception as e:
-        print("Error fetching trivia quiz:", e)
+    except Exception:
         return None
 
 async def send_quiz(bot: Bot):
-    count = load_txt(COUNT_FILE)
-    print("Current sent count:", count)
+    count = int(load_txt(COUNT_FILE) or 0)
     if count >= 7:
         return
-
     used_questions = load_used_questions()
     quiz = None
-
-    for _ in range(5):  # max 5 retries
+    for _ in range(5):
         candidate = fetch_daily_quiz()
         if candidate and candidate["question"] not in used_questions:
             quiz = candidate
             save_used_question(candidate["question"])
             break
-
     if not quiz:
-        print("Couldn't find a new quiz after several attempts.")
         return
-
     try:
         gujarati_question = translator.translate(quiz["question"])
         gujarati_options = [translator.translate(opt) for opt in quiz["options"]]
         gujarati_explanation = translator.translate(quiz["explanation"])
-        print("Translated quiz successfully")
-    except Exception as e:
-        print("Translation failed, using original:", e)
+    except Exception:
         gujarati_question = quiz["question"]
         gujarati_options = quiz["options"]
         gujarati_explanation = quiz["explanation"]
-
     try:
         await bot.send_poll(
             chat_id=CHAT_ID,
@@ -148,60 +119,49 @@ async def send_quiz(bot: Bot):
             explanation=gujarati_explanation,
             is_anonymous=True,
         )
-        print("Quiz sent successfully!")
         save_txt(COUNT_FILE, count + 1)
-    except Exception as e:
-        print("Failed to send quiz:", e)
+    except Exception:
+        pass
 
 async def reset_daily_counter():
     save_txt(COUNT_FILE, 0)
-    print("Daily counter reset to 0")
 
 async def handle_start(bot: Bot, update: Update):
     try:
         await bot.send_message(
             chat_id=update.message.chat_id,
-            text="🙏 સ્વાગત છે! તમે હવે 'પ્રગતિ સેતુ ક્વિઝ બોટ' સાથે જોડાયા છો.\n"
-                 "દરરોજ નવા પ્રશ્નો માટે તૈયાર રહો! 📚\n\n"
-                 "📲 વધુ શૈક્ષણિક કન્ટેન્ટ માટે 'Pragati Setu' એપ ડાઉનલોડ કરો.\n"
-                 "સફળ અભ્યાસ માટે શુભેચ્છાઓ! 🚀"
+            text="🙏 સ્વાગત છે! તમે હવે 'પ્રગતિ સેતુ ક્વિઝ બોટ' સાથે જોડાયા છો.\nદરરોજ નવા પ્રશ્નો માટે તૈયાર રહો! 📚\n\n📲 વધુ શૈક્ષણિક કન્ટેન્ટ માટે 'Pragati Setu' એપ ડાઉનલોડ કરો.\nસફળ અભ્યાસ માટે શુભેચ્છાઓ! 🚀"
         )
-        print(f"/start message sent to {update.message.chat_id}")
-    except TelegramError as e:
-        print("Failed to send /start message:", e)
+    except TelegramError:
+        pass
 
 async def handle_system_messages(bot: Bot, update: Update):
     try:
         if getattr(update, "message", None):
             if getattr(update.message, "new_chat_members", None) or getattr(update.message, "left_chat_member", None):
                 await update.message.delete()
-                print("Deleted system message")
-    except TelegramError as e:
-        print("Failed to delete system message:", e)
+    except TelegramError:
+        pass
 
 async def main_loop():
     bot = Bot(token=TOKEN_API)
     await bot.delete_webhook()
-    print("Webhook removed, bot started...")
-
     await bot.get_updates(offset=-1)
     last_update_id = None
-    last_quiz_slot = load_last_slot()
-    print("Cleared old updates, starting fresh.")
 
     while True:
         now = datetime.now()
+        today = now.strftime("%Y-%m-%d")
+        reset_done = load_txt(RESET_FILE)
+        last_slot = load_txt(SLOT_FILE)
 
-        # Handle incoming updates
         try:
             updates = await bot.get_updates(offset=last_update_id, timeout=10)
         except Conflict:
-            print("Conflict detected. Sleeping 10s and retrying...")
             await asyncio.sleep(10)
             last_update_id = None
             continue
-        except Exception as e:
-            print("Error fetching updates:", e)
+        except Exception:
             await asyncio.sleep(5)
             continue
 
@@ -212,17 +172,14 @@ async def main_loop():
                 if update.message.text.startswith("/start"):
                     await handle_start(bot, update)
 
-        if now.hour == 8 and last_quiz_slot != "reset":
+        if now.hour == 8 and reset_done != today:
             await reset_daily_counter()
-            last_quiz_slot = "reset"
-            save_last_slot(last_quiz_slot)
+            save_txt(RESET_FILE, today)
 
-        slot_id = f"{now.strftime('%Y-%m-%d')}_{now.hour//2}"
-
-        if 8 <= now.hour < 22 and last_quiz_slot != slot_id:
+        slot_id = f"{today}_{now.hour//2}"
+        if 8 <= now.hour < 22 and last_slot != slot_id:
             await send_quiz(bot)
-            last_quiz_slot = slot_id
-            save_last_slot(slot_id)
+            save_txt(SLOT_FILE, slot_id)
 
         await asyncio.sleep(30)
 
