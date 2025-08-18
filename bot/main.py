@@ -178,13 +178,13 @@ async def main_loop():
 
     await bot.get_updates(offset=-1)
     last_update_id = None
-    last_quiz_hour = None
+    last_quiz_slot = None
     print("Cleared old updates, starting fresh.")
 
     while True:
-        
         now = datetime.now()
-        
+
+        # Handle incoming updates
         try:
             updates = await bot.get_updates(offset=last_update_id, timeout=10)
         except Conflict:
@@ -204,24 +204,25 @@ async def main_loop():
                 if update.message.text.startswith("/start"):
                     await handle_start(bot, update)
 
+        # ---- QUIZ SCHEDULER (outside update loop) ----
 
-                # Reset daily counter at 8 AM (only once)
-        if now.hour == 8 and (last_quiz_hour != "reset" or last_quiz_hour is None):
+        # Reset daily counter at 8 AM
+        if now.hour == 8 and (last_quiz_slot != "reset"):
             await reset_daily_counter()
-            last_quiz_hour = "reset"
+            last_quiz_slot = "reset"
 
         # Create a slot ID for every 2-hour block
         slot_id = f"{now.strftime('%Y-%m-%d')}_{now.hour//2}"
 
         # Send quizzes every 2 hours from 8 AM to 10 PM (1 quiz per slot)
-        if now.hour in range(8, 22) and last_quiz_hour != slot_id:
+        if now.hour in range(8, 22) and last_quiz_slot != slot_id:
             await send_quiz(bot)
-            last_quiz_hour = slot_id
+            last_quiz_slot = slot_id
 
-
-
+        # ----------------------------------------------
 
         await asyncio.sleep(30)
+
 
 if __name__ == "__main__":
     asyncio.run(main_loop())
