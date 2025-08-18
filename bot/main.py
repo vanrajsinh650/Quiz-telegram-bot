@@ -17,10 +17,12 @@ CHAT_ID = int(os.getenv("CHAT_ID"))
 DATA_DIR = "data"
 COUNT_FILE = os.path.join(DATA_DIR, "quiz_sent_count.txt")
 USED_QUESTIONS_FILE = os.path.join(DATA_DIR, "used_questions.json")
+LAST_SLOT_FILE = os.path.join(DATA_DIR, "last_quiz_slot.txt")   # ✅ NEW
 
 translator = GoogleTranslator(source="en", target="gu")
 os.makedirs(DATA_DIR, exist_ok=True)
 
+# ---------- File utilities ----------
 def load_txt(file_path):
     if not os.path.exists(file_path):
         return 0
@@ -41,6 +43,7 @@ def save_json(file_path, data):
     with open(file_path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
+# ---------- Quiz tracking ----------
 def load_used_questions():
     data = load_json(USED_QUESTIONS_FILE)
     today = datetime.now().strftime("%Y-%m-%d")
@@ -54,9 +57,18 @@ def save_used_question(question_text):
     data[today].append(question_text)
     save_json(USED_QUESTIONS_FILE, data)
 
-import requests
-import random
+# ---------- Slot tracking (fix) ----------
+def load_last_slot():
+    if not os.path.exists(LAST_SLOT_FILE):
+        return None
+    with open(LAST_SLOT_FILE, "r", encoding="utf-8") as f:
+        return f.read().strip() or None
 
+def save_last_slot(slot_id):
+    with open(LAST_SLOT_FILE, "w", encoding="utf-8") as f:
+        f.write(slot_id)
+
+# ---------- Quiz fetch ----------
 def fetch_daily_quiz():
     url = "https://the-trivia-api.com/v2/questions?limit=1&region=IN&type=multiple"
 
@@ -73,7 +85,6 @@ def fetch_daily_quiz():
         correct_answer = question_data["correctAnswer"]
         incorrect_answers = question_data["incorrectAnswers"]
 
-        # Avoid duplication or missing answer
         options = list(set(incorrect_answers + [correct_answer]))
         if correct_answer not in options:
             print("Correct answer missing from options, skipping.")
@@ -97,6 +108,7 @@ def fetch_daily_quiz():
         print("Error fetching trivia quiz:", e)
         return None
 
+# ---------- Bot actions ----------
 async def send_quiz(bot: Bot):
     count = load_txt(COUNT_FILE)
     print("Current sent count:", count)
@@ -171,6 +183,7 @@ async def handle_system_messages(bot: Bot, update: Update):
     except TelegramError as e:
         print("Failed to delete system message:", e)
 
+# ---------- Main loop ----------
 async def main_loop():
     bot = Bot(token=TOKEN_API)
     await bot.delete_webhook()
@@ -184,7 +197,7 @@ async def main_loop():
     while True:
         now = datetime.now()
 
-        # Handle incoming updates...
+        # Handle incoming updates
         try:
             updates = await bot.get_updates(offset=last_update_id, timeout=10)
         except Conflict:
@@ -219,7 +232,6 @@ async def main_loop():
         # ------------------------
 
         await asyncio.sleep(30)
-
 
 
 if __name__ == "__main__":
