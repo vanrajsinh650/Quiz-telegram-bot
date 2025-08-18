@@ -10,24 +10,25 @@ import requests
 import random
 
 load_dotenv()
-
 TOKEN_API = os.getenv("TOKEN_API")
 CHAT_ID = int(os.getenv("CHAT_ID"))
 
 DATA_DIR = "data"
 COUNT_FILE = os.path.join(DATA_DIR, "quiz_sent_count.txt")
 USED_QUESTIONS_FILE = os.path.join(DATA_DIR, "used_questions.json")
-LAST_SLOT_FILE = os.path.join(DATA_DIR, "last_quiz_slot.txt")   # ✅ NEW
+LAST_SLOT_FILE = os.path.join(DATA_DIR, "last_quiz_slot.txt")
 
 translator = GoogleTranslator(source="en", target="gu")
 os.makedirs(DATA_DIR, exist_ok=True)
 
-# ---------- File utilities ----------
 def load_txt(file_path):
     if not os.path.exists(file_path):
         return 0
-    with open(file_path, "r", encoding="utf-8") as f:
-        return int(f.read().strip() or 0)
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            return int(f.read().strip() or 0)
+    except Exception:
+        return 0
 
 def save_txt(file_path, value):
     with open(file_path, "w", encoding="utf-8") as f:
@@ -36,14 +37,16 @@ def save_txt(file_path, value):
 def load_json(file_path):
     if not os.path.exists(file_path) or os.stat(file_path).st_size == 0:
         return {}
-    with open(file_path, "r", encoding="utf-8") as f:
-        return json.load(f)
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except json.JSONDecodeError:
+        return {}
 
 def save_json(file_path, data):
     with open(file_path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
-# ---------- Quiz tracking ----------
 def load_used_questions():
     data = load_json(USED_QUESTIONS_FILE)
     today = datetime.now().strftime("%Y-%m-%d")
@@ -57,7 +60,6 @@ def save_used_question(question_text):
     data[today].append(question_text)
     save_json(USED_QUESTIONS_FILE, data)
 
-# ---------- Slot tracking (fix) ----------
 def load_last_slot():
     if not os.path.exists(LAST_SLOT_FILE):
         return None
@@ -68,10 +70,8 @@ def save_last_slot(slot_id):
     with open(LAST_SLOT_FILE, "w", encoding="utf-8") as f:
         f.write(slot_id)
 
-# ---------- Quiz fetch ----------
 def fetch_daily_quiz():
     url = "https://the-trivia-api.com/v2/questions?limit=1&region=IN&type=multiple"
-
     try:
         response = requests.get(url, timeout=10)
         response.raise_for_status()
@@ -82,33 +82,31 @@ def fetch_daily_quiz():
             return None
 
         question_data = data[0]
-        correct_answer = question_data["correctAnswer"]
-        incorrect_answers = question_data["incorrectAnswers"]
+        correct_answer = question_data.get("correctAnswer")
+        incorrect_answers = question_data.get("incorrectAnswers", [])
 
-        options = list(set(incorrect_answers + [correct_answer]))
-        if correct_answer not in options:
-            print("Correct answer missing from options, skipping.")
+        if not correct_answer:
+            print("Missing correct answer in data.")
             return None
 
+        options = list(set(incorrect_answers + [correct_answer]))
         random.shuffle(options)
 
         if correct_answer not in options:
             print("Correct answer lost after shuffle, skipping.")
             return None
 
-        quiz = {
+        return {
             "question": question_data["question"]["text"],
             "options": options,
             "correctIndex": options.index(correct_answer),
             "explanation": f"Answer: {correct_answer}"
         }
-        return quiz
 
     except Exception as e:
         print("Error fetching trivia quiz:", e)
         return None
 
-# ---------- Bot actions ----------
 async def send_quiz(bot: Bot):
     count = load_txt(COUNT_FILE)
     print("Current sent count:", count)
@@ -116,16 +114,14 @@ async def send_quiz(bot: Bot):
         return
 
     used_questions = load_used_questions()
-    attempts = 0
     quiz = None
 
-    while attempts < 5:
+    for _ in range(5):  # max 5 retries
         candidate = fetch_daily_quiz()
         if candidate and candidate["question"] not in used_questions:
             quiz = candidate
             save_used_question(candidate["question"])
             break
-        attempts += 1
 
     if not quiz:
         print("Couldn't find a new quiz after several attempts.")
@@ -170,7 +166,7 @@ async def handle_start(bot: Bot, update: Update):
                  "📲 વધુ શૈક્ષણિક કન્ટેન્ટ માટે 'Pragati Setu' એપ ડાઉનલોડ કરો.\n"
                  "સફળ અભ્યાસ માટે શુભેચ્છાઓ! 🚀"
         )
-        print("/start message sent to", update.message.chat_id)
+        print(f"/start message sent to {update.message.chat_id}")
     except TelegramError as e:
         print("Failed to send /start message:", e)
 
@@ -183,11 +179,10 @@ async def handle_system_messages(bot: Bot, update: Update):
     except TelegramError as e:
         print("Failed to delete system message:", e)
 
-# ---------- Main loop ----------
 async def main_loop():
     bot = Bot(token=TOKEN_API)
     await bot.delete_webhook()
-    print("Webhook removed, starting bot...")
+    print("Webhook removed, bot started...")
 
     await bot.get_updates(offset=-1)
     last_update_id = None
@@ -217,7 +212,6 @@ async def main_loop():
                 if update.message.text.startswith("/start"):
                     await handle_start(bot, update)
 
-        # ---- QUIZ SCHEDULER ----
         if now.hour == 8 and last_quiz_slot != "reset":
             await reset_daily_counter()
             last_quiz_slot = "reset"
@@ -225,14 +219,12 @@ async def main_loop():
 
         slot_id = f"{now.strftime('%Y-%m-%d')}_{now.hour//2}"
 
-        if now.hour in range(8, 22) and last_quiz_slot != slot_id:
+        if 8 <= now.hour < 22 and last_quiz_slot != slot_id:
             await send_quiz(bot)
             last_quiz_slot = slot_id
             save_last_slot(slot_id)
-        # ------------------------
 
         await asyncio.sleep(30)
-
 
 if __name__ == "__main__":
     asyncio.run(main_loop())
