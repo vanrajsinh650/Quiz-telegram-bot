@@ -205,18 +205,19 @@ async def main_loop():
                     await handle_start(bot, update)
 
 
-        # Reset daily counter at 8 AM (only once)
+                # Reset daily counter at 8 AM (only once)
         if now.hour == 8 and (last_quiz_hour != "reset" or last_quiz_hour is None):
             await reset_daily_counter()
             last_quiz_hour = "reset"
 
-        # Create a slot ID like "2025-08-17_08"
-        slot_id = f"{now.strftime('%Y-%m-%d')}_{now.hour}"
+        # Create a slot ID for every 2-hour block
+        slot_id = f"{now.strftime('%Y-%m-%d')}_{now.hour//2}"
 
         # Send quizzes every 2 hours from 8 AM to 10 PM (1 quiz per slot)
-        if now.hour in range(8, 22, 2) and last_quiz_hour != slot_id:
+        if now.hour in range(8, 22) and last_quiz_hour != slot_id:
             await send_quiz(bot)
             last_quiz_hour = slot_id
+
 
 
 
