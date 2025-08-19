@@ -89,6 +89,14 @@ def fetch_daily_quiz():
         }
     except Exception:
         return None
+    
+def safe_translate(text, retries=3):
+    for _ in range(retries):
+        try:
+            return translator.translate(text)
+        except Exception:
+            continue
+    return text
 
 async def send_quiz(bot: Bot):
     count = int(load_txt(COUNT_FILE) or 0)
@@ -105,9 +113,9 @@ async def send_quiz(bot: Bot):
     if not quiz:
         return
     try:
-        gujarati_question = translator.translate(quiz["question"])
-        gujarati_options = [translator.translate(opt) for opt in quiz["options"]]
-        gujarati_explanation = translator.translate(quiz["explanation"])
+        gujarati_question = safe_translate.translate(quiz["question"])
+        gujarati_options = [safe_translate.translate(opt) for opt in quiz["options"]]
+        gujarati_explanation = safe_translate.translate(quiz["explanation"])
     except Exception:
         gujarati_question = quiz["question"]
         gujarati_options = quiz["options"]
