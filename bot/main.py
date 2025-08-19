@@ -113,9 +113,9 @@ async def send_quiz(bot: Bot):
     if not quiz:
         return
     try:
-        gujarati_question = safe_translate.translate(quiz["question"])
-        gujarati_options = [safe_translate.translate(opt) for opt in quiz["options"]]
-        gujarati_explanation = safe_translate.translate(quiz["explanation"])
+        gujarati_question = safe_translate(quiz["question"])
+        gujarati_options = [safe_translate(opt) for opt in quiz["options"]]
+        gujarati_explanation = safe_translate(quiz["explanation"])
     except Exception:
         gujarati_question = quiz["question"]
         gujarati_options = quiz["options"]
