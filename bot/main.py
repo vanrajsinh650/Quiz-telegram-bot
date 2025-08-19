@@ -8,6 +8,7 @@ import os
 import json
 import requests
 import random
+import pytz
 
 load_dotenv()
 TOKEN_API = os.getenv("TOKEN_API")
@@ -22,6 +23,8 @@ SLOT_FILE = os.path.join(DATA_DIR, "last_slot.txt")
 translator = GoogleTranslator(source="en", target="gu")
 os.makedirs(DATA_DIR, exist_ok=True)
 
+IST = pytz.timezone("Asia/Kolkata")
+        
 def load_txt(file_path):
     if not os.path.exists(file_path):
         return None
@@ -150,7 +153,7 @@ async def main_loop():
     last_update_id = None
 
     while True:
-        now = datetime.now()
+        now = datetime.now(IST)
         today = now.strftime("%Y-%m-%d")
         reset_done = load_txt(RESET_FILE)
         last_slot = load_txt(SLOT_FILE)
